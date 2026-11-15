@@ -1,0 +1,73 @@
+name: Update calendar page
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours; adjust as needed
+  workflow_dispatch: {}      # allows manual "Run workflow" from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Write service account credentials
+        run: echo "${{ secrets.GCAL_CREDENTIALS_B64 }}" | base64 -d > service-account.json
+
+      - name: Compute date range
+        id: dates
+        env:
+          TZ: ${{ vars.TIMEZONE || 'UTC' }}
+        run: |
+          echo "start=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          echo "end=$(date -d '+30 days' +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate calendar page
+        run: |
+          mkdir -p public
+          python generate_page.py \
+            --start "${{ steps.dates.outputs.start }}" \
+            --end "${{ steps.dates.outputs.end }}" \
+            --calendar-id "${{ vars.CALENDAR_ID }}" \
+            --credentials service-account.json \
+            --timezone "${{ vars.TIMEZONE || 'UTC' }}" \
+            --output public/index.html \
+            --title "${{ vars.PAGE_TITLE || 'Calendar' }}"
+
+      - name: Remove credentials
+        if: always()
+        run: rm -f service-account.json
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

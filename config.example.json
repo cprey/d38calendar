@@ -1,0 +1,7 @@
+{
+  "calendar_id": "your_calendar_id_or_email@group.calendar.google.com",
+  "credentials": "service-account.json",
+  "timezone": "America/New_York",
+  "output": "calendar.html",
+  "title": "Team Calendar"
+}

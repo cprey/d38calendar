@@ -1,0 +1,16 @@
+# Google service account credentials - never commit
+credentials*.json
+service-account*.json
+*-key.json
+
+# Generated output pages
+*.html
+
+# Local config (paths/IDs specific to your setup)
+config.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
