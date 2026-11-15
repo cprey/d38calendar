@@ -157,13 +157,13 @@ Setup:
      ```
    - **Variables** tab → add `CALENDAR_ID` (your calendar ID/email) and,
      optionally, `PAGE_TITLE` and `TIMEZONE` (an IANA name such as
-     `America/New_York`; defaults to `UTC`). `TIMEZONE` sets both how "today"
-     is computed for the rolling window and how event times are displayed.
+     `America/New_York`; defaults to `UTC`). `TIMEZONE` sets both which year is
+     "current" and how event times are displayed.
 4. The workflow runs every 6 hours and on manual trigger (**Actions → Update
-   calendar page → Run workflow**), regenerating a rolling 30-day window
-   (today through today + 30 days) and publishing it to your repo's GitHub
-   Pages URL.
+   calendar page → Run workflow**), regenerating the page with every event in
+   the current year (Jan 1 through Dec 31, including past events) and
+   publishing it to your repo's GitHub Pages URL.
 
 To change the schedule, edit the `cron` line in the workflow file. To change
-the date window, edit the `Compute date range` step (e.g. hardcode fixed
-dates instead of a rolling window).
+the date window, edit the `Compute date range` step (e.g. a rolling window
+such as `$(date +%Y-%m-%d)` to `$(date -d '+30 days' +%Y-%m-%d)`).
