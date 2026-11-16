@@ -1,0 +1,16 @@
+{
+  "title": "D38 Race Calendar",
+  "timezone": "America/Los_Angeles",
+  "calendars": [
+    {
+      "label": "Motorcycle",
+      "id": "d9007e9c76eb4187368945330a4017b40d2e495d0ed6e93c42a65dfbaeedf5e9@group.calendar.google.com",
+      "page": "motorcycle.html"
+    },
+    {
+      "label": "UTV",
+      "id": "c25e281c691f134cf41ac1f6793675d4ff52219a60f66f96a13844bfde9f4a28@group.calendar.google.com",
+      "page": "utv.html"
+    }
+  ]
+}

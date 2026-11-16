@@ -11,10 +11,19 @@
   th { background: #f5f5f5; }
   tr:hover td { background: #fafafa; }
   .meta { color: #666; font-size: 0.9rem; }
+  nav.calendars { margin: 0.5rem 0 1rem; font-size: 1rem; }
+  nav.calendars a, nav.calendars strong { margin-right: 0.25rem; }
+  nav.calendars .sep { color: #999; margin-right: 0.25rem; }
 </style>
 </head>
 <body>
   <h1>{{ title or (calendar_id ~ ' (' ~ start ~ ' to ' ~ end ~ ')') }}</h1>
+  {% if nav and nav|length > 1 %}
+  <nav class="calendars">
+    {% for item in nav %}{% if not loop.first %}<span class="sep">|</span>{% endif %}{% if item.current %}<strong>{{ item.label }}</strong>{% else %}<a href="{{ item.page }}">{{ item.label }}</a>{% endif %}
+    {% endfor %}
+  </nav>
+  {% endif %}
   <p class="meta">Generated {{ generated_at.strftime('%Y-%m-%d %H:%M') }} &middot; {{ events|length }} event(s)</p>
   <table>
     <thead>

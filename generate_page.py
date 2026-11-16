@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
-"""CLI entry point: fetch events from a Google Calendar and write an HTML page.
+"""CLI entry point: fetch events from one or more Google Calendars and write
+one HTML page per calendar, plus index.html (a copy of the first page).
+
+Calendars, page names, site title and timezone come from a JSON config file
+(default: calendars.json). See README.md for the format.
 
 Ties together gcal_source.py (data) and render.py (display). To change how
-events are fetched, edit gcal_source.py; to change how the page looks, edit
+events are fetched, edit gcal_source.py; to change how the pages look, edit
 templates/table.html.j2. Neither needs to touch this file.
 
 Usage:
-    python generate_page.py --start 2026-08-01 --end 2026-08-31 \
-        --calendar-id your_calendar@group.calendar.google.com \
-        --credentials service-account.json --output calendar.html
-
-    # Or via config file (CLI args override config values):
-    python generate_page.py --config config.json --start 2026-08-01 --end 2026-08-31
+    python generate_page.py --start 2026-01-01 --end 2026-12-31
+    python generate_page.py --config calendars.json --start 2026-01-01 --end 2026-12-31 \
+        --credentials service-account.json --output-dir public
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -28,49 +30,51 @@ from render import render_events
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--config", type=Path, help="Path to a JSON config file with defaults")
-    parser.add_argument("--start", help="Start date, inclusive (YYYY-MM-DD)")
-    parser.add_argument("--end", help="End date, inclusive (YYYY-MM-DD)")
-    parser.add_argument("--calendar-id", help="Calendar ID or email to read events from")
-    parser.add_argument("--credentials", type=Path, help="Path to service account JSON key file")
-    parser.add_argument("--timezone", help="IANA timezone for interpreting --start/--end (default: UTC)")
-    parser.add_argument("--output", type=Path, help="Path to write the HTML file (default: calendar.html)")
-    parser.add_argument("--title", help="Page title")
-    parser.add_argument("--template", help="Template filename in templates/ (default: table.html.j2)")
+    parser.add_argument("--config", type=Path, default=Path("calendars.json"), help="JSON config file (default: calendars.json)")
+    parser.add_argument("--start", required=True, help="Start date, inclusive (YYYY-MM-DD)")
+    parser.add_argument("--end", required=True, help="End date, inclusive (YYYY-MM-DD)")
+    parser.add_argument(
+        "--credentials",
+        type=Path,
+        default=Path("service-account.json"),
+        help="Service account JSON key file (default: service-account.json)",
+    )
+    parser.add_argument("--output-dir", type=Path, default=Path("."), help="Directory to write pages into (default: .)")
+    parser.add_argument("--template", default="table.html.j2", help="Template filename in templates/ (default: table.html.j2)")
     return parser.parse_args()
 
 
+def _slugify(label: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-") or "calendar"
+
+
 def load_config(path: Path) -> dict:
+    """Load and validate the config file. Exits with a clear message on any problem."""
     if not path.exists():
         sys.exit(f"Config file not found: {path}")
     try:
-        return json.loads(path.read_text())
+        config = json.loads(path.read_text())
     except json.JSONDecodeError as exc:
         sys.exit(f"Config file is not valid JSON: {path} ({exc})")
 
+    calendars = config.get("calendars")
+    if not isinstance(calendars, list) or not calendars:
+        sys.exit(f"{path}: 'calendars' must be a non-empty list")
 
-def resolve_settings(args) -> dict:
-    config = load_config(args.config) if args.config else {}
+    pages_seen = set()
+    for i, cal in enumerate(calendars, start=1):
+        if not isinstance(cal, dict) or not cal.get("label") or not cal.get("id"):
+            sys.exit(f"{path}: calendar #{i} needs both 'label' and 'id'")
+        cal.setdefault("page", _slugify(cal["label"]) + ".html")
+        if cal["page"] == "index.html":
+            sys.exit(f"{path}: calendar '{cal['label']}' can't use page 'index.html' (it's written automatically)")
+        if cal["page"] in pages_seen:
+            sys.exit(f"{path}: page '{cal['page']}' is used by more than one calendar")
+        pages_seen.add(cal["page"])
 
-    settings = {
-        "start": args.start or config.get("start"),
-        "end": args.end or config.get("end"),
-        "calendar_id": args.calendar_id or config.get("calendar_id"),
-        "credentials": args.credentials or (Path(config["credentials"]) if config.get("credentials") else None),
-        "timezone": args.timezone or config.get("timezone") or "UTC",
-        "output": args.output or (Path(config["output"]) if config.get("output") else Path("calendar.html")),
-        "title": args.title or config.get("title"),
-        "template": args.template or config.get("template") or "table.html.j2",
-    }
-
-    missing = [key for key in ("start", "end", "calendar_id", "credentials") if not settings[key]]
-    if missing:
-        sys.exit("Missing required setting(s): " + ", ".join(missing) + ". Provide them via CLI flags or --config.")
-
-    if not settings["credentials"].exists():
-        sys.exit(f"Credentials file not found: {settings['credentials']}")
-
-    return settings
+    config.setdefault("title", "Calendar")
+    config.setdefault("timezone", "UTC")
+    return config
 
 
 def warn_about_private_pdfs(events) -> None:
@@ -89,32 +93,59 @@ def warn_about_private_pdfs(events) -> None:
 
 def main():
     args = parse_args()
-    settings = resolve_settings(args)
+    config = load_config(args.config)
 
-    try:
-        events = fetch_events(
-            calendar_id=settings["calendar_id"],
-            credentials_path=settings["credentials"],
-            start_date=settings["start"],
-            end_date=settings["end"],
-            timezone=settings["timezone"],
+    if not args.credentials.exists():
+        sys.exit(f"Credentials file not found: {args.credentials}")
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+
+    calendars = config["calendars"]
+    failures = []
+    first_page_html = None
+
+    for cal in calendars:
+        try:
+            events = fetch_events(
+                calendar_id=cal["id"],
+                credentials_path=args.credentials,
+                start_date=args.start,
+                end_date=args.end,
+                timezone=config["timezone"],
+            )
+        except ValueError as exc:
+            # Bad dates/timezone affect every calendar; no point continuing.
+            sys.exit(str(exc))
+        except CalendarFetchError as exc:
+            print(f"Error: '{cal['label']}': {exc}", file=sys.stderr)
+            failures.append(cal["label"])
+            continue
+
+        warn_about_private_pdfs(events)
+
+        nav = [{"label": c["label"], "page": c["page"], "current": c is cal} for c in calendars]
+        html = render_events(
+            events,
+            template_name=args.template,
+            title=f"{config['title']} – {cal['label']}" if len(calendars) > 1 else config["title"],
+            calendar_id=cal["id"],
+            start=args.start,
+            end=args.end,
+            nav=nav,
         )
-    except (CalendarFetchError, ValueError) as exc:
-        sys.exit(str(exc))
+        out_path = args.output_dir / cal["page"]
+        out_path.write_text(html)
+        print(f"Wrote {len(events)} event(s) to {out_path}")
 
-    warn_about_private_pdfs(events)
+        if cal is calendars[0]:
+            first_page_html = html
 
-    output_html = render_events(
-        events,
-        template_name=settings["template"],
-        title=settings["title"],
-        calendar_id=settings["calendar_id"],
-        start=settings["start"],
-        end=settings["end"],
-    )
+    if first_page_html is not None:
+        index_path = args.output_dir / "index.html"
+        index_path.write_text(first_page_html)
+        print(f"Wrote {index_path} (copy of {calendars[0]['page']})")
 
-    settings["output"].write_text(output_html)
-    print(f"Wrote {len(events)} event(s) to {settings['output']}")
+    if failures:
+        sys.exit(f"Failed to fetch {len(failures)} calendar(s): {', '.join(failures)}")
 
 
 if __name__ == "__main__":

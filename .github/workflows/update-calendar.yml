@@ -34,24 +34,20 @@ jobs:
 
       - name: Compute date range
         id: dates
-        env:
-          TZ: ${{ vars.TIMEZONE || 'UTC' }}
         run: |
-          # Whole current year (Jan 1 - Dec 31) in TIMEZONE
+          # Whole current year (Jan 1 - Dec 31) in the timezone from calendars.json
+          export TZ="$(python -c 'import json; print(json.load(open("calendars.json")).get("timezone", "UTC"))')"
           echo "start=$(date +%Y)-01-01" >> "$GITHUB_OUTPUT"
           echo "end=$(date +%Y)-12-31" >> "$GITHUB_OUTPUT"
 
-      - name: Generate calendar page
+      - name: Generate calendar pages
         run: |
-          mkdir -p public
           python generate_page.py \
+            --config calendars.json \
             --start "${{ steps.dates.outputs.start }}" \
             --end "${{ steps.dates.outputs.end }}" \
-            --calendar-id "${{ vars.CALENDAR_ID }}" \
             --credentials service-account.json \
-            --timezone "${{ vars.TIMEZONE || 'UTC' }}" \
-            --output public/index.html \
-            --title "${{ vars.PAGE_TITLE || 'Calendar' }}"
+            --output-dir public
 
       - name: Remove credentials
         if: always()
