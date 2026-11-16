@@ -3,29 +3,45 @@
 <head>
 <meta charset="utf-8">
 <title>{{ title or (calendar_id ~ ' (' ~ start ~ ' to ' ~ end ~ ')') }}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
-  h1 { font-size: 1.4rem; }
-  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #ddd; vertical-align: top; }
-  th { background: #f5f5f5; }
-  tr:hover td { background: #fafafa; }
-  .meta { color: #666; font-size: 0.9rem; }
-  nav.calendars { margin: 0.5rem 0 1rem; font-size: 1rem; }
-  nav.calendars a, nav.calendars strong { margin-right: 0.25rem; }
-  nav.calendars .sep { color: #999; margin-right: 0.25rem; }
+  /* Matches the Race Schedule styling on amad38.com (styles.css: base, .race-section, .race-table) */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; line-height: 1.6; color: #222; background: #f7f7f7; padding: 20px; }
+  a { color: #0044cc; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .race-section { margin: 50px auto; max-width: 1100px; }
+  .race-section h2 { text-align: center; margin-bottom: 15px; font-size: 2rem; color: #222; }
+  .race-section p.center { text-align: center; margin-bottom: 20px; }
+
+  .race-table { width: 100%; border-collapse: collapse; background: white; border-radius: 6px; overflow: hidden; margin-bottom: 20px; }
+  .race-table th { background: #000081; color: white; padding: 12px; font-size: 1rem; text-align: left; }
+  .race-table td { padding: 10px; border-bottom: 1px solid #ddd; font-size: 0.95rem; }
+  .race-table tr:nth-child(even) { background: #f0f4ff; }
+  .race-table td.race-name a { font-weight: bold; }
+
+  /* Additions for this generator: calendar switcher and footer note */
+  nav.calendars { text-align: center; margin-bottom: 20px; }
+  nav.calendars a, nav.calendars strong { margin: 0 0.25rem; }
+  nav.calendars .sep { color: #999; }
+  .notes { font-size: 0.9rem; color: #444; text-align: center; }
+
+  @media (max-width: 600px) {
+    .race-table th, .race-table td { font-size: 0.85rem; padding: 8px; }
+  }
 </style>
 </head>
 <body>
-  <h1>{{ title or (calendar_id ~ ' (' ~ start ~ ' to ' ~ end ~ ')') }}</h1>
+<section class="race-section">
+  <h2>{{ title or (calendar_id ~ ' (' ~ start ~ ' to ' ~ end ~ ')') }}</h2>
   {% if nav and nav|length > 1 %}
-  <nav class="calendars">
+  <nav class="calendars center">
     {% for item in nav %}{% if not loop.first %}<span class="sep">|</span>{% endif %}{% if item.current %}<strong>{{ item.label }}</strong>{% else %}<a href="{{ item.page }}">{{ item.label }}</a>{% endif %}
     {% endfor %}
   </nav>
   {% endif %}
-  <p class="meta">Generated {{ generated_at.strftime('%Y-%m-%d %H:%M') }} &middot; {{ events|length }} event(s)</p>
-  <table>
+  <table class="race-table">
     <thead>
       <tr><th>Date</th><th>Race Name</th><th>Club</th><th>Location</th><th>Format</th></tr>
     </thead>
@@ -33,7 +49,7 @@
       {% for event in events %}
       <tr>
         <td>{{ event.start|date('%b')|upper }} {{ event.start.day }}</td>
-        <td>{% if event.pdf_url %}<a href="{{ event.pdf_url }}" target="_blank" rel="noopener">{{ event.summary }}</a>{% else %}{{ event.summary }}{% endif %}</td>
+        <td class="race-name">{% if event.pdf_url %}<a href="{{ event.pdf_url }}" target="_blank" rel="noopener">{{ event.summary }}</a>{% else %}{{ event.summary }}{% endif %}</td>
         <td>{{ event.details.club }}</td>
         {# Label: "Venue:" line, else the location field. Map target: "GPS:" line, else the location field. #}
         {% set venue_label = event.details.venue or event.location %}
@@ -46,5 +62,7 @@
       {% endfor %}
     </tbody>
   </table>
+  <p class="notes">Updated {{ generated_at.strftime('%Y-%m-%d %H:%M') }}</p>
+</section>
 </body>
 </html>
